@@ -1,9 +1,16 @@
 package com.ms.user.UserService.controller;
 
 import com.ms.user.UserService.entities.User;
+import com.ms.user.UserService.impl.UserServiceImpl;
 import com.ms.user.UserService.payload.ApiResponse;
 import com.ms.user.UserService.service.UserService;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
+import io.github.resilience4j.retry.annotation.Retry;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.security.SecurityProperties;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -15,8 +22,14 @@ import java.util.UUID;
 @RequestMapping("/user")
 public class UserController {
 
+
+
     @Autowired
     private UserService userService;
+
+    private Logger logger = LoggerFactory.getLogger(UserController.class);
+
+
 
     // create User
 
@@ -39,10 +52,34 @@ public class UserController {
     }
 
     // get user by id
+    int retryCount = 1;
     @GetMapping("/{userID}")
+    //@CircuitBreaker(name = "ratingHotelBreaker",fallbackMethod = "ratingHotelFallback")
+    //@Retry(name = "ratingHotelService",fallbackMethod = "ratingHotelFallback")
+    @RateLimiter(name = "ratingHotelLimiter", fallbackMethod = "ratingHotelFallback")
     public ResponseEntity<User> getUser(@PathVariable String userID){
+        logger.info("Get single user handler: User-Controller");
+        logger.info("Retry count: {}", retryCount);
+        retryCount++;
         User user = userService.getUserByID(userID);
         return ResponseEntity.ok().body(user);
+
+    }
+
+    // creating fallback method for circuit breaker
+    public ResponseEntity<User> ratingHotelFallback(String userId, Exception ex) {
+
+        logger.info("Fallback is executed because service is down : ", ex.getMessage());
+         User user = User.builder()
+                .email("abc@gmail.com")
+                .name("dummy")
+                .about("Service is down")
+                .userID("12345")
+                .build();
+
+        return new ResponseEntity<>(user, HttpStatus.OK);
+
+
 
     }
 
